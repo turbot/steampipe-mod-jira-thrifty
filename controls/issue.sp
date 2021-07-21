@@ -1,7 +1,3 @@
-locals {
-  issue_common_tags = local.sherlock_common_tags
-}
-
 benchmark "issue_best_practices" {
   title = "Issue Best Practices"
   description = "Best practices for your issues."
@@ -11,7 +7,7 @@ benchmark "issue_best_practices" {
     control.issue_older_30_days,
     control.issue_over_duedate,
     control.issue_with_epic,
-    control.issue_with_no_duplicate_summary,
+    control.issue_time_tracking_enabled,
   ]
 }
 
@@ -37,10 +33,9 @@ control "issue_over_duedate" {
       jira_issue
     where
       status <> 'Done';
-
   EOT
 
-    tags = local.sherlock_common_tags
+  tags = local.sherlock_common_tags
 }
 
 control "issue_has_assignee" {
@@ -114,41 +109,6 @@ control "issue_has_labels" {
   tags = local.sherlock_common_tags
 }
 
-control "issue_with_no_duplicate_summary" {
-  title = "Issue with no duplicate summary"
-  description = "There are no duplicate summary for issues in project."
-
-  sql = <<-EOT
-    with duplicate_summary_count as (
-      select
-        count(id) as summary_count,
-        project_id,
-        summary
-      from
-        jira_issue
-      where
-        status <> 'Done'
-      group by summary, project_id
-    )
-    select
-      id as resource,
-      case
-        when c.summary_count > 1 then 'alarm'
-        else 'ok'
-      end as status,
-      case
-        when c.summary_count > 1 then 'Summary (' || c.summary || ') is repeated ' || c.summary_count || ' times.'
-        else 'There is no duplicate summary.'
-      end as reason,
-      i.title
-    from
-      jira_project as i
-      left join duplicate_summary_count as c on i.id = c.project_id
-  EOT
-
-  tags = local.sherlock_common_tags
-}
-
 control "issue_with_epic" {
   title = "Issue should have epic associated"
   description = "Issue should have epic key associated to which issue belongs."
@@ -169,6 +129,29 @@ control "issue_with_epic" {
       jira_issue
     where
       status <> 'Done';
+  EOT
+
+  tags = local.sherlock_common_tags
+}
+
+control "issue_time_tracking_enabled" {
+  title = "Time tracking should be enabled for each issue"
+  description = "Issue time tracking should be enabled for as time tracking lets your team record the time they spend working on issue."
+
+  sql = <<-EOT
+    select
+      time_tracking_enabled as resource,
+      case
+        when time_tracking_enabled then 'ok'
+        else 'alarm'
+      end as status,
+      case
+        when time_tracking_enabled then 'Time tracking enabled for each issue.'
+        else 'Time tracking not enabled for each issue.'
+      end as reason,
+      time_tracking_enabled
+    from
+      jira_global_setting;
   EOT
 
   tags = local.sherlock_common_tags
